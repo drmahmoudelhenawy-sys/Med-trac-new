@@ -32,7 +32,13 @@ import {
   Flag,
   Filter,
   Thermometer,
-  Image as ImageIcon,
+  Pill,
+  Lock,
+  Key,
+  Mail,
+  ShieldCheck,
+  UserCheck,
+  UserX,
 } from "lucide-react";
 
 // --- Firebase Imports ---
@@ -49,6 +55,9 @@ import {
   getFirestore,
   collection,
   addDoc,
+  setDoc,
+  getDoc,
+  getDocs,
   onSnapshot,
   deleteDoc,
   updateDoc,
@@ -72,91 +81,99 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = "patient-tracker-v1";
 
+// --- SECURITY CONFIGURATION ---
+const SYSTEM_ACCESS_PIN = "IAM-DOCTOR";
+
 // --- Translations ---
 const TRANSLATIONS = {
   en: {
     appName: "Med Trac",
     slogan: "Collaborative Patient System",
-    loginGoogle: "Continue with Google",
-    loginGuest: "Continue as Guest",
+    loginGoogle: "Login with Google",
+    loginGuest: "Enter as Guest",
     docName: "Doctor Name",
+    email: "Email Address",
     hospital: "Hospital / College",
     grade: "Grade",
-    start: "Enter System",
+    start: "Start Session",
     dashboard: "Dashboard",
-    search: "Search name, diagnosis...",
+    search: "Search...",
     total: "Total",
     highRisk: "High Risk",
     topRisk: "Top Risk",
     addPatient: "New Admission",
     editPatient: "Edit Case",
-    save: "Save Record",
-    update: "Update Record",
-    delete: "Discharge/Delete",
+    save: "Save",
+    update: "Update",
+    delete: "Delete",
     presentation: "Diagnosis & Presentation",
     riskProfile: "Risk Factors",
-    exam: "Vitals & Exam",
+    exam: "Vitals",
     workup: "Investigations",
-    recordedBy: "Admitted by",
-    date: "Date",
-    deleteConfirm: "Are you sure you want to delete this record globally?",
-    risks: "Risks",
-    loading: "Syncing...",
-    dept: "Department / Referral",
-    isHighRisk: "Mark as High Risk Case",
+    treatment: "Treatment",
+    treatmentPlaceholder: "Plan...",
     status: "Status",
-    filterAll: "All Patients",
-    filterHigh: "High Risk Only",
-    filterMy: "My Entries",
+    recordedBy: "By",
+    loading: "Verifying...",
+    dept: "Dept",
+    isHighRisk: "High Risk",
+    accessCode: "Access Code",
+    accessCodePlaceholder: "Enter Security Code",
+    invalidCode: "Incorrect Access Code!",
+    authError: "Authentication Error",
+    dbError: "Database Connection Error",
+    deleteConfirm: "Are you sure you want to delete this record globally?",
   },
   ar: {
     appName: "ميد تراك",
-    slogan: "نظام متابعة المرضى التشاركي",
+    slogan: "نظام متابعة المرضى",
     loginGoogle: "دخول عبر جوجل",
     loginGuest: "دخول كضيف",
     docName: "اسم الطبيب",
+    email: "البريد الإلكتروني",
     hospital: "المستشفى",
     grade: "الدرجة",
-    start: "دخول النظام",
+    start: "بدء الجلسة",
     dashboard: "لوحة المتابعة",
-    search: "بحث بالاسم أو التشخيص...",
-    total: "العدد الكلي",
+    search: "بحث...",
+    total: "العدد",
     highRisk: "حالات خطرة",
     topRisk: "الأكثر شيوعاً",
-    addPatient: "تسجيل دخول حالة",
+    addPatient: "إضافة حالة",
     editPatient: "تعديل بيانات",
-    save: "حفظ السجل",
-    update: "تحديث البيانات",
-    delete: "حذف / خروج",
-    presentation: "التشخيص والشكوى",
+    save: "حفظ",
+    update: "تحديث",
+    delete: "حذف",
+    presentation: "التشخيص",
     riskProfile: "عوامل الخطر",
-    exam: "الفحص والعلامات الحيوية",
+    exam: "الفحص",
     workup: "الفحوصات",
-    recordedBy: "سُجلت بواسطة",
-    date: "التاريخ",
+    treatment: "العلاج",
+    treatmentPlaceholder: "خطة العلاج...",
+    status: "الحالة",
+    recordedBy: "بواسطة",
+    loading: "جاري التحقق...",
+    dept: "القسم",
+    isHighRisk: "حالة خطرة",
+    accessCode: "كود الدخول",
+    accessCodePlaceholder: "أدخل الكود السري",
+    invalidCode: "الكود السري غير صحيح!",
+    authError: "خطأ في الاتصال",
+    dbError: "خطأ في الاتصال بقاعدة البيانات",
     deleteConfirm: "هل أنت متأكد؟ سيتم حذف الحالة من عند جميع الأطباء.",
-    risks: "عامل خطر",
-    loading: "جاري المزامنة...",
-    dept: "القسم / تحويل من",
-    isHighRisk: "تصنيف كحالة خطرة (High Risk)",
-    status: "حالة التواجد",
-    filterAll: "كل الحالات",
-    filterHigh: "الحالات الخطرة فقط",
-    filterMy: "تسجيلاتي فقط",
   },
 };
 
-// --- Constants ---
 const GRADES = ["Junior", "Mid-Senior", "Senior", "Consultant"];
 const DEPARTMENTS = [
-  "ER (Emergency)",
+  "ER",
   "Internal Medicine",
   "Neurology",
   "ICU",
   "Surgery",
   "Cardiology",
-  "Outpatient Clinic",
-  "Referral (External)",
+  "Clinic",
+  "Referral",
 ];
 const PATIENT_STATUS = [
   "Admitted",
@@ -164,7 +181,6 @@ const PATIENT_STATUS = [
   "Discharge Planned",
   "Critical",
 ];
-
 const RISK_FACTORS = [
   "Hypertension",
   "Diabetes",
@@ -229,7 +245,129 @@ const IMAGING_INVESTIGATIONS = [
   "Fundus",
 ];
 
-// --- Helper Components ---
+// --- 1. Base UI Components ---
+
+const Button = ({
+  children,
+  onClick,
+  variant = "primary",
+  className = "",
+  disabled = false,
+}) => {
+  const base =
+    "px-4 py-2 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed";
+  const styles = {
+    primary: "bg-emerald-600 text-white hover:bg-emerald-700 shadow-md",
+    danger: "bg-rose-500 text-white hover:bg-rose-600 shadow-md",
+    secondary:
+      "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600",
+    google: "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50",
+    ghost:
+      "bg-transparent text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800",
+  };
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`${base} ${styles[variant]} ${className}`}
+    >
+      {children}
+    </button>
+  );
+};
+
+const Input = ({
+  label,
+  name,
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+  icon: Icon,
+  required,
+}) => (
+  <div className="mb-3 w-full">
+    {label && (
+      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 mx-1">
+        {label}
+      </label>
+    )}
+    <div className="relative">
+      {Icon && (
+        <div className="absolute top-1/2 -translate-y-1/2 left-3 text-slate-400">
+          {Icon}
+        </div>
+      )}
+      <input
+        name={name}
+        type={type}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        required={required}
+        className={`w-full ${
+          Icon ? "pl-9" : "pl-3"
+        } pr-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 text-slate-700 dark:text-slate-200 text-sm`}
+      />
+    </div>
+  </div>
+);
+
+const Select = ({ label, name, value, onChange, options, icon: Icon }) => (
+  <div className="mb-3 w-full">
+    {label && (
+      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 mx-1">
+        {label}
+      </label>
+    )}
+    <div className="relative">
+      {Icon && (
+        <div className="absolute top-1/2 -translate-y-1/2 left-3 text-slate-400 pointer-events-none">
+          {Icon}
+        </div>
+      )}
+      <select
+        name={name}
+        value={value}
+        onChange={onChange}
+        className={`w-full ${
+          Icon ? "pl-9" : "pl-3"
+        } pr-8 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-emerald-500 appearance-none`}
+      >
+        <option value="" disabled>
+          Select...
+        </option>
+        {options.map((opt) => (
+          <option key={opt} value={opt}>
+            {opt}
+          </option>
+        ))}
+      </select>
+      <ChevronDown
+        size={16}
+        className="absolute top-1/2 -translate-y-1/2 right-3 text-slate-400 pointer-events-none"
+      />
+    </div>
+  </div>
+);
+
+const TextArea = ({ label, name, value, onChange, placeholder, rows = 3 }) => (
+  <div className="mb-3 w-full">
+    {label && (
+      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 mx-1">
+        {label}
+      </label>
+    )}
+    <textarea
+      name={name}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      rows={rows}
+      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 text-slate-700 dark:text-slate-200 text-sm resize-none"
+    />
+  </div>
+);
 
 const CircularProgress = ({
   value,
@@ -238,6 +376,8 @@ const CircularProgress = ({
   subLabel,
   colorClass,
   icon: Icon,
+  onClick,
+  isActive,
 }) => {
   const radius = 30;
   const circumference = 2 * Math.PI * radius;
@@ -245,7 +385,14 @@ const CircularProgress = ({
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
 
   return (
-    <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-lg border border-slate-100 dark:border-slate-700 flex items-center gap-3 relative overflow-hidden group hover:scale-[1.02] transition-transform duration-300">
+    <div
+      onClick={onClick}
+      className={`bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-lg border flex items-center gap-3 relative overflow-hidden group hover:scale-[1.02] transition-all duration-300 cursor-pointer ${
+        isActive
+          ? "border-emerald-500 ring-2 ring-emerald-500/20"
+          : "border-slate-100 dark:border-slate-700"
+      }`}
+    >
       <div
         className={`absolute inset-0 opacity-0 group-hover:opacity-5 transition-opacity duration-500 bg-current ${colorClass}`}
       ></div>
@@ -294,141 +441,15 @@ const CircularProgress = ({
   );
 };
 
-const Button = ({
-  children,
-  onClick,
-  variant = "primary",
-  className = "",
-  type = "button",
-  icon: Icon,
-  disabled = false,
-}) => {
-  const variants = {
-    primary:
-      "bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:shadow-lg hover:shadow-emerald-500/30 border-none",
-    secondary:
-      "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700",
-    danger:
-      "bg-gradient-to-r from-rose-500 to-red-600 text-white hover:shadow-lg hover:shadow-rose-500/30 border-none",
-    google:
-      "bg-white dark:bg-slate-700 text-slate-700 dark:text-white border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600",
-    ghost:
-      "bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800",
-  };
-  return (
-    <button
-      type={type}
-      onClick={onClick}
-      disabled={disabled}
-      className={`px-5 py-3 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${variants[variant]} ${className}`}
-    >
-      {Icon && <Icon size={18} />}
-      {children}
-    </button>
-  );
-};
-
-const Input = ({
-  label,
-  value,
-  onChange,
-  placeholder,
-  type = "text",
-  required = false,
-  icon: Icon,
-}) => (
-  <div className="mb-4 w-full group">
-    {label && (
-      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5 mx-1">
-        {label}
-      </label>
-    )}
-    <div className="relative">
-      {Icon && (
-        <div className="absolute top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 group-focus-within:text-emerald-500 start-3 transition-colors">
-          {Icon}
-        </div>
-      )}
-      <input
-        type={type}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        required={required}
-        className={`w-full ${
-          Icon ? "ps-10" : "ps-4"
-        } pe-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 shadow-sm`}
-      />
-    </div>
-  </div>
-);
-
-const Select = ({ label, value, onChange, options, icon: Icon }) => (
-  <div className="mb-4 w-full">
-    {label && (
-      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5 mx-1">
-        {label}
-      </label>
-    )}
-    <div className="relative">
-      {Icon && (
-        <div className="absolute top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 start-3 pointer-events-none">
-          {Icon}
-        </div>
-      )}
-      <select
-        value={value}
-        onChange={onChange}
-        className={`w-full ${
-          Icon ? "ps-10" : "ps-4"
-        } pe-10 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all text-slate-700 dark:text-slate-200 appearance-none shadow-sm cursor-pointer`}
-      >
-        <option value="" disabled>
-          Select...
-        </option>
-        {options.map((opt) => (
-          <option key={opt} value={opt}>
-            {opt}
-          </option>
-        ))}
-      </select>
-      <ChevronDown
-        size={16}
-        className="absolute top-1/2 -translate-y-1/2 end-4 text-slate-400 pointer-events-none"
-      />
-    </div>
-  </div>
-);
-
-const TextArea = ({ label, value, onChange, placeholder, rows = 3 }) => (
-  <div className="mb-4 w-full">
-    {label && (
-      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5 mx-1">
-        {label}
-      </label>
-    )}
-    <textarea
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder}
-      rows={rows}
-      className="w-full p-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none resize-none text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 shadow-sm"
-    />
-  </div>
-);
-
-const InvestigationItem = ({ name, data, onUpdate, t }) => {
+const InvestigationItem = ({ name, data, onUpdate }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef(null);
 
-  // Modified image handler to support multiple files & resize them to avoid Firestore limit
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
-
     setIsProcessing(true);
-
     const readFileAndResize = (file) => {
       return new Promise((resolve) => {
         const reader = new FileReader();
@@ -436,9 +457,8 @@ const InvestigationItem = ({ name, data, onUpdate, t }) => {
           const img = new Image();
           img.onload = () => {
             const canvas = document.createElement("canvas");
-            const MAX_WIDTH = 800; // Limit width to 800px
+            const MAX_WIDTH = 800;
             const scaleSize = MAX_WIDTH / img.width;
-
             if (scaleSize < 1) {
               canvas.width = MAX_WIDTH;
               canvas.height = img.height * scaleSize;
@@ -446,10 +466,8 @@ const InvestigationItem = ({ name, data, onUpdate, t }) => {
               canvas.width = img.width;
               canvas.height = img.height;
             }
-
             const ctx = canvas.getContext("2d");
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            // Compress to JPEG 0.7 quality
             const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
             resolve({ url: dataUrl, name: file.name });
           };
@@ -458,20 +476,15 @@ const InvestigationItem = ({ name, data, onUpdate, t }) => {
         reader.readAsDataURL(file);
       });
     };
-
     try {
-      // Process all images concurrently
       const newImages = await Promise.all(files.map(readFileAndResize));
-
-      // Update state only ONCE after all images are processed
       const currentImages = data.images || [];
       onUpdate({ ...data, images: [...currentImages, ...newImages] });
     } catch (error) {
       console.error("Error processing images", error);
-      alert("Error uploading images. Please try again.");
+      alert("Error uploading images.");
     } finally {
       setIsProcessing(false);
-      // Reset input so same files can be selected again if needed
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
@@ -584,7 +597,237 @@ const InvestigationItem = ({ name, data, onUpdate, t }) => {
   );
 };
 
-// --- Dashboard ---
+// --- 2. Sub-Components ---
+
+const DashboardStats = ({ patients, t, filterMode, setFilterMode }) => {
+  const stats = useMemo(() => {
+    const total = patients.length;
+    const highRisk = patients.filter((p) => p.isHighRisk).length;
+    const riskCounts = {};
+    patients.forEach((p) =>
+      Object.keys(p.riskFactors || {})
+        .filter((k) => p.riskFactors[k])
+        .forEach((r) => (riskCounts[r] = (riskCounts[r] || 0) + 1))
+    );
+    const topRisk = Object.entries(riskCounts).sort((a, b) => b[1] - a[1])[0];
+    return {
+      total,
+      highRisk,
+      topRiskName: topRisk ? topRisk[0] : "-",
+      topRiskCount: topRisk ? topRisk[1] : 0,
+    };
+  }, [patients]);
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+      <div
+        onClick={() => setFilterMode("all")}
+        className={`bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-lg border flex justify-between items-center cursor-pointer transition-all hover:scale-[1.02] ${
+          filterMode === "all"
+            ? "border-emerald-500 ring-2 ring-emerald-500/20"
+            : "border-slate-100 dark:border-slate-700"
+        }`}
+      >
+        <div>
+          <p className="text-xs font-bold text-slate-400 uppercase">
+            {t.total}
+          </p>
+          <p className="text-3xl font-bold text-slate-800 dark:text-white">
+            {stats.total}
+          </p>
+        </div>
+        <div className="w-10 h-10 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center">
+          <Users size={20} />
+        </div>
+      </div>
+
+      <CircularProgress
+        onClick={() => setFilterMode("high")}
+        isActive={filterMode === "high"}
+        value={stats.highRisk}
+        max={stats.total}
+        label={t.highRisk}
+        colorClass="text-rose-500"
+        icon={AlertCircle}
+      />
+
+      <CircularProgress
+        value={stats.topRiskCount}
+        max={stats.total}
+        label={t.topRisk}
+        subLabel={stats.topRiskName}
+        colorClass="text-emerald-500"
+        icon={PieChart}
+      />
+    </div>
+  );
+};
+
+const PatientList = ({ patients, setView, setSelectedPatient }) => {
+  return (
+    <div className="max-w-7xl mx-auto p-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {patients.map((patient) => (
+        <div
+          key={patient.id}
+          onClick={() => {
+            setSelectedPatient(patient);
+            setView("details");
+          }}
+          className="group bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm hover:shadow-lg transition-all border border-slate-100 dark:border-slate-700 cursor-pointer relative overflow-hidden"
+        >
+          <div
+            className={`absolute top-0 start-0 w-1.5 h-full rounded-s-2xl ${
+              patient.isHighRisk ? "bg-rose-500" : "bg-emerald-500"
+            }`}
+          ></div>
+          <div className="flex justify-between items-start mb-3 ps-3">
+            <div>
+              <h3 className="font-bold text-lg text-slate-800 dark:text-white line-clamp-1">
+                {patient.name}
+              </h3>
+              <span className="text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded">
+                {patient.age} Yrs
+              </span>
+            </div>
+            {patient.isHighRisk && (
+              <div className="w-6 h-6 bg-rose-100 text-rose-500 rounded-full flex items-center justify-center">
+                <AlertCircle size={14} />
+              </div>
+            )}
+          </div>
+          <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2 ps-3 mb-3">
+            {patient.presentation}
+          </p>
+          <div className="flex items-center gap-2 text-xs text-slate-400 ps-3 border-t border-slate-100 pt-2">
+            <User size={12} /> {patient.author}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const AdminPanel = ({ authUser, setView, t }) => {
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Real-time listener for pending users
+    const usersRef = collection(
+      db,
+      "artifacts",
+      appId,
+      "public",
+      "data",
+      "users"
+    );
+    const unsubscribe = onSnapshot(usersRef, (snapshot) => {
+      const pending = [];
+      snapshot.forEach((doc) => {
+        if (doc.data().status === "pending") {
+          pending.push({ id: doc.id, ...doc.data() });
+        }
+      });
+      setRequests(pending);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleAction = async (userId, action) => {
+    if (!window.confirm(`Are you sure you want to ${action} this user?`))
+      return;
+    try {
+      const userRef = doc(
+        db,
+        "artifacts",
+        appId,
+        "public",
+        "data",
+        "users",
+        userId
+      );
+      await updateDoc(userRef, {
+        status: action === "approve" ? "approved" : "rejected",
+      });
+    } catch (e) {
+      alert("Error updating status");
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6">
+      <div className="max-w-2xl mx-auto">
+        <div className="flex items-center gap-4 mb-6">
+          <button
+            onClick={() => setView("dashboard")}
+            className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm"
+          >
+            <ArrowLeft
+              size={20}
+              className="text-slate-600 dark:text-slate-300 rtl:rotate-180"
+            />
+          </button>
+          <h2 className="text-xl font-bold text-slate-800 dark:text-white">
+            {t.requestsList}
+          </h2>
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center">
+            <Loader2 className="animate-spin text-emerald-500" />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {requests.length === 0 ? (
+              <p className="text-center text-slate-400 py-10">{t.noRequests}</p>
+            ) : (
+              requests.map((req) => (
+                <div
+                  key={req.id}
+                  className="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800 flex justify-between items-center"
+                >
+                  <div>
+                    <h3 className="font-bold text-slate-800 dark:text-white">
+                      {req.name}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {req.email}
+                    </p>
+                    <div className="flex gap-2 mt-1">
+                      <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-600 dark:text-slate-300">
+                        {req.college}
+                      </span>
+                      <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-600 dark:text-slate-300">
+                        {req.grade}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleAction(req.id, "approve")}
+                      className="p-2 bg-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-200"
+                    >
+                      <UserCheck size={18} />
+                    </button>
+                    <button
+                      onClick={() => handleAction(req.id, "reject")}
+                      className="p-2 bg-rose-100 text-rose-600 rounded-lg hover:bg-rose-200"
+                    >
+                      <UserX size={18} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// --- 3. Main Views ---
 
 const Dashboard = ({
   user,
@@ -621,27 +864,6 @@ const Dashboard = ({
     }
     return data;
   }, [patients, searchQuery, filterMode, authUser]);
-
-  const stats = useMemo(() => {
-    const total = patients.length;
-    const highRiskCount = patients.filter((p) => p.isHighRisk).length;
-
-    const riskCounts = {};
-    patients.forEach((p) => {
-      const risks = Object.keys(p.riskFactors || {}).filter(
-        (k) => p.riskFactors[k]
-      );
-      risks.forEach((r) => (riskCounts[r] = (riskCounts[r] || 0) + 1));
-    });
-    const topRisk = Object.entries(riskCounts).sort((a, b) => b[1] - a[1])[0];
-
-    return {
-      total,
-      highRisk: highRiskCount,
-      topRiskName: topRisk ? topRisk[0] : "-",
-      topRiskCount: topRisk ? topRisk[1] : 0,
-    };
-  }, [patients]);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-24 transition-colors duration-500">
@@ -683,38 +905,12 @@ const Dashboard = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-            <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-lg border border-slate-100 dark:border-slate-700 flex items-center justify-between group hover:scale-[1.02] transition-transform">
-              <div>
-                <p className="text-slate-400 dark:text-slate-500 text-xs uppercase font-bold tracking-wider">
-                  {t.total}
-                </p>
-                <p className="text-3xl font-bold text-slate-800 dark:text-white mt-1">
-                  {stats.total}
-                </p>
-              </div>
-              <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-500">
-                <Users size={24} />
-              </div>
-            </div>
-
-            <CircularProgress
-              value={stats.highRisk}
-              max={stats.total}
-              label={t.highRisk}
-              colorClass="text-rose-500"
-              icon={AlertCircle}
-            />
-
-            <CircularProgress
-              value={stats.topRiskCount}
-              max={stats.total}
-              label={t.topRisk}
-              subLabel={stats.topRiskName}
-              colorClass="text-emerald-500"
-              icon={PieChart}
-            />
-          </div>
+          <DashboardStats
+            patients={patients}
+            t={t}
+            filterMode={filterMode}
+            setFilterMode={setFilterMode}
+          />
 
           <div className="flex flex-col gap-3">
             <div className="relative shadow-sm rounded-xl w-full">
@@ -753,72 +949,11 @@ const Dashboard = ({
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto p-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {filteredPatients.length === 0 ? (
-          <div className="col-span-full flex flex-col items-center justify-center py-20 text-slate-400 dark:text-slate-600">
-            <div className="w-20 h-20 bg-slate-100 dark:bg-slate-900 rounded-full flex items-center justify-center mb-4">
-              <Activity size={32} className="opacity-40" />
-            </div>
-            <p className="font-medium">No patients found</p>
-          </div>
-        ) : (
-          filteredPatients.map((patient) => (
-            <div
-              key={patient.id}
-              onClick={() => {
-                setSelectedPatient(patient);
-                setView("details");
-              }}
-              className="group bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border border-slate-100 dark:border-slate-700 cursor-pointer relative overflow-hidden"
-            >
-              <div
-                className={`absolute top-0 start-0 w-1.5 h-full rounded-s-2xl ${
-                  patient.isHighRisk ? "bg-rose-500" : "bg-emerald-500"
-                }`}
-              ></div>
-
-              <div className="flex justify-between items-start mb-3 ps-3">
-                <div>
-                  <h3 className="font-bold text-lg text-slate-800 dark:text-white leading-tight line-clamp-1">
-                    {patient.name}
-                  </h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-slate-500 dark:text-slate-400 text-xs font-medium bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-md">
-                      {patient.age} Yrs
-                    </span>
-                    {patient.department && (
-                      <span className="text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-md truncate max-w-[100px]">
-                        {patient.department}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {patient.isHighRisk && (
-                  <div className="w-8 h-8 rounded-full bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center text-rose-600 dark:text-rose-400 shrink-0 animate-pulse">
-                    <AlertCircle size={16} />
-                  </div>
-                )}
-              </div>
-
-              <p className="text-slate-600 dark:text-slate-300 text-sm line-clamp-2 mb-4 ps-3 bg-slate-50 dark:bg-slate-900/50 p-2 rounded-lg border border-slate-50 dark:border-slate-700/50">
-                {patient.presentation}
-              </p>
-
-              <div className="flex items-center gap-3 text-xs text-slate-400 dark:text-slate-500 ps-3 mt-auto pt-2 border-t border-slate-100 dark:border-slate-700">
-                <div className="flex items-center gap-1">
-                  <User size={12} />
-                  <span className="truncate max-w-[80px]">
-                    {patient.author}
-                  </span>
-                </div>
-                <span className="ms-auto font-medium text-slate-300 dark:text-slate-600">
-                  {patient.dateAdded}
-                </span>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+      <PatientList
+        patients={filteredPatients}
+        setView={setView}
+        setSelectedPatient={setSelectedPatient}
+      />
 
       <button
         onClick={() => setView("add")}
@@ -829,8 +964,6 @@ const Dashboard = ({
     </div>
   );
 };
-
-// --- Form Component ---
 
 const PatientForm = ({ user, authUser, setView, existingPatient, t }) => {
   const [loading, setLoading] = useState(false);
@@ -844,6 +977,7 @@ const PatientForm = ({ user, authUser, setView, existingPatient, t }) => {
     riskFactors: {},
     examination: {},
     investigations: {},
+    treatment: "",
   });
 
   useEffect(() => {
@@ -858,6 +992,7 @@ const PatientForm = ({ user, authUser, setView, existingPatient, t }) => {
         riskFactors: existingPatient.riskFactors || {},
         examination: existingPatient.examination || {},
         investigations: existingPatient.investigations || {},
+        treatment: existingPatient.treatment || "",
       });
     }
   }, [existingPatient]);
@@ -876,8 +1011,6 @@ const PatientForm = ({ user, authUser, setView, existingPatient, t }) => {
         "data",
         "patients"
       );
-
-      // Ensure undefined values are not sent to Firestore
       const safeData = {
         name: formData.name || "",
         age: formData.age || "",
@@ -888,6 +1021,7 @@ const PatientForm = ({ user, authUser, setView, existingPatient, t }) => {
         riskFactors: formData.riskFactors || {},
         examination: formData.examination || {},
         investigations: formData.investigations || {},
+        treatment: formData.treatment || "",
       };
 
       if (existingPatient) {
@@ -1098,12 +1232,197 @@ const PatientForm = ({ user, authUser, setView, existingPatient, t }) => {
             />
           ))}
         </div>
+
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+          <h3 className="text-emerald-700 dark:text-emerald-400 font-bold mb-4 flex items-center gap-2 text-sm uppercase tracking-wider">
+            <Pill size={18} /> {t.treatment}
+          </h3>
+          <TextArea
+            label={t.treatment}
+            value={formData.treatment}
+            onChange={(e) =>
+              setFormData({ ...formData, treatment: e.target.value })
+            }
+            placeholder={t.treatmentPlaceholder}
+            rows={5}
+          />
+        </div>
       </div>
     </div>
   );
 };
 
-// --- Main App Component ---
+const PatientDetails = ({ selectedPatient, setView, t, onDelete }) => {
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-10 transition-colors duration-300">
+      <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md shadow-sm px-4 py-4 sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 dark:border-slate-800">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setView("dashboard")}
+            className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+          >
+            <ArrowLeft className="rtl:rotate-180" size={20} />
+          </button>
+          <div>
+            <h1 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+              {selectedPatient.name}
+              {selectedPatient.isHighRisk && (
+                <span className="bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  High Risk
+                </span>
+              )}
+            </h1>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {selectedPatient.age} Yrs •{" "}
+              {selectedPatient.department || "General"}
+            </span>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setView("edit")}
+            className="text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 p-2 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+          >
+            <Edit3 size={20} />
+          </button>
+          <button
+            onClick={() => onDelete(selectedPatient.id)}
+            className="text-rose-500 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/20 p-2 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors"
+          >
+            <Trash2 size={20} />
+          </button>
+        </div>
+      </div>
+      <div className="p-4 max-w-3xl mx-auto space-y-5">
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+          <div className="flex justify-between items-start mb-4 border-b border-slate-100 dark:border-slate-700 pb-4">
+            <div className="flex flex-col">
+              <span className="text-xs text-slate-400 uppercase font-bold">
+                {t.status}
+              </span>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                {selectedPatient.status || "Active"}
+              </span>
+            </div>
+            <div className="flex flex-col text-end">
+              <span className="text-xs text-slate-400 uppercase font-bold">
+                {t.recordedBy}
+              </span>
+              <div className="flex items-center gap-1 text-slate-700 dark:text-slate-200 font-medium justify-end">
+                <User size={14} /> {selectedPatient.author}
+              </div>
+            </div>
+          </div>
+          <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">
+            {t.presentation}
+          </h3>
+          <p className="text-lg text-slate-800 dark:text-white leading-relaxed">
+            {selectedPatient.presentation}
+          </p>
+        </div>
+
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+          <h3 className="text-xs font-bold text-slate-400 uppercase mb-4">
+            {t.treatment}
+          </h3>
+          <p className="text-slate-800 dark:text-white whitespace-pre-line leading-relaxed">
+            {selectedPatient.treatment || "No treatment recorded."}
+          </p>
+        </div>
+
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+          <h3 className="text-xs font-bold text-slate-400 uppercase mb-4">
+            {t.riskProfile}
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {Object.keys(selectedPatient.riskFactors || {})
+              .filter((k) => selectedPatient.riskFactors[k])
+              .map((k) => (
+                <span
+                  key={k}
+                  className="bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 px-4 py-1.5 rounded-full text-sm font-semibold border border-rose-100 dark:border-rose-800"
+                >
+                  {k}
+                </span>
+              ))}
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+          <h3 className="text-xs font-bold text-slate-400 uppercase mb-4">
+            {t.exam}
+          </h3>
+          <div className="grid grid-cols-2 gap-4">
+            {EXAMINATION_FIELDS.map(
+              (f) =>
+                selectedPatient.examination?.[f.id] && (
+                  <div
+                    key={f.id}
+                    className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl"
+                  >
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
+                      {f.label}
+                    </span>
+                    <span className="font-bold text-xl text-slate-800 dark:text-white">
+                      {selectedPatient.examination[f.id]}
+                    </span>
+                  </div>
+                )
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+          <h3 className="text-xs font-bold text-slate-400 uppercase mb-4">
+            {t.workup}
+          </h3>
+          <div className="space-y-3">
+            {Object.keys(selectedPatient.investigations || {}).map((k) => {
+              const item = selectedPatient.investigations[k];
+              if (!item.result && !item.notes && !item.images?.length)
+                return null;
+              return (
+                <div
+                  key={k}
+                  className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-900/50"
+                >
+                  <div className="flex justify-between mb-2">
+                    <span className="font-bold text-slate-700 dark:text-slate-300">
+                      {k}
+                    </span>
+                    {item.result && (
+                      <span className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 px-2 rounded text-sm font-bold">
+                        {item.result}
+                      </span>
+                    )}
+                  </div>
+                  {item.notes && (
+                    <p className="text-sm italic text-slate-600 dark:text-slate-400">
+                      "{item.notes}"
+                    </p>
+                  )}
+                  {item.images?.length > 0 && (
+                    <div className="flex gap-2 mt-2 overflow-x-auto">
+                      {item.images.map((img, i) => (
+                        <img
+                          key={i}
+                          src={img.url}
+                          className="h-20 w-20 rounded-lg object-cover border dark:border-slate-600"
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- 4. App Component ---
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -1116,6 +1435,7 @@ export default function App() {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [lang, setLang] = useState("en");
   const [darkMode, setDarkMode] = useState(false);
+  const [accessCodeInput, setAccessCodeInput] = useState("");
 
   // Inject Tailwind
   useEffect(() => {
@@ -1205,6 +1525,10 @@ export default function App() {
 
   const handleManualLogin = async (e) => {
     e.preventDefault();
+    if (accessCodeInput !== SYSTEM_ACCESS_PIN) {
+      alert(t.invalidCode);
+      return;
+    }
     setLoading(true);
     const fd = new FormData(e.target);
     const userData = {
@@ -1225,6 +1549,10 @@ export default function App() {
   };
 
   const handleGoogleLogin = async () => {
+    if (accessCodeInput !== SYSTEM_ACCESS_PIN) {
+      alert(t.invalidCode);
+      return;
+    }
     setIsGoogleLoading(true);
     try {
       const provider = new GoogleAuthProvider();
@@ -1241,7 +1569,6 @@ export default function App() {
     await signOut(auth);
     setView("login");
   };
-
   const handleDeletePatient = async (pid) => {
     if (window.confirm(t.deleteConfirm))
       await deleteDoc(
@@ -1249,47 +1576,56 @@ export default function App() {
       );
   };
 
-  // --- Views Routing ---
-
+  // Views Routing
   if (view === "login") {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-6 relative overflow-hidden transition-colors duration-500">
-        <div className="absolute top-[-10%] start-[-10%] w-96 h-96 bg-emerald-200/30 dark:bg-emerald-500/10 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-[-10%] end-[-10%] w-96 h-96 bg-teal-200/30 dark:bg-teal-500/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
-
         <div className="absolute top-6 end-6 flex gap-2 z-20">
           <button
             onClick={() => setDarkMode(!darkMode)}
-            className="p-2.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur text-slate-600 dark:text-slate-300 rounded-full shadow-sm hover:scale-110 transition-transform"
+            className="p-2.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur rounded-full shadow-sm"
           >
             {darkMode ? <Sun size={18} /> : <Moon size={18} />}
           </button>
           <button
             onClick={() => setLang(lang === "en" ? "ar" : "en")}
-            className="p-2.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur text-slate-600 dark:text-slate-300 rounded-full shadow-sm font-bold text-sm w-10 h-10 flex items-center justify-center hover:scale-110 transition-transform"
+            className="p-2.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur rounded-full shadow-sm text-xs font-bold"
           >
             {lang === "en" ? "ع" : "En"}
           </button>
         </div>
 
-        <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border border-white/50 dark:border-slate-700 rounded-[2rem] shadow-2xl p-8 w-full max-w-md relative z-10">
-          <div className="text-center mb-8">
-            <div className="bg-gradient-to-br from-emerald-400 to-teal-600 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-emerald-500/30 transform rotate-6 hover:rotate-0 transition-all duration-500">
-              <Activity size={40} className="text-white" />
+        <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-2xl border border-white/50 dark:border-slate-800 rounded-[2rem] shadow-2xl p-8 w-full max-w-md relative z-10">
+          <div className="text-center mb-6">
+            <div className="bg-gradient-to-br from-emerald-400 to-teal-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl shadow-emerald-500/30">
+              <Activity size={32} className="text-white" />
             </div>
-            <h1 className="text-4xl font-black text-slate-800 dark:text-white tracking-tight font-sans mb-2">
+            <h1 className="text-3xl font-black text-slate-800 dark:text-white tracking-tight font-sans mb-1">
               {t.appName}
             </h1>
-            <p className="text-slate-500 dark:text-slate-400 font-medium">
+            <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">
               {t.slogan}
             </p>
           </div>
+
           {authError && (
             <div className="bg-red-50 dark:bg-rose-900/20 text-red-600 dark:text-rose-400 text-sm p-4 rounded-xl mb-6 border border-red-200 dark:border-rose-800 flex gap-2 items-center">
               <AlertTriangle size={18} /> {authError}
             </div>
           )}
-          <div className="mb-8">
+
+          <div className="mb-6">
+            <Input
+              label={t.accessCode}
+              type="password"
+              value={accessCodeInput}
+              onChange={(e) => setAccessCodeInput(e.target.value)}
+              placeholder={t.accessCodePlaceholder}
+              icon={<Lock size={18} />}
+            />
+          </div>
+
+          <div className="mb-8 border-t border-slate-200 dark:border-slate-700 pt-6">
             <Button
               onClick={handleGoogleLogin}
               variant="google"
@@ -1308,13 +1644,14 @@ export default function App() {
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-slate-200 dark:border-slate-700"></div>
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 font-medium uppercase tracking-widest text-[10px]">
+              <div className="relative flex justify-center text-xs">
+                <span className="px-3 bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 font-medium uppercase tracking-widest">
                   Or
                 </span>
               </div>
             </div>
           </div>
+
           <form onSubmit={handleManualLogin} className="space-y-5">
             <Input
               label={t.docName}
@@ -1368,7 +1705,7 @@ export default function App() {
     return (
       <PatientForm
         user={user}
-        authUser={authUser}
+        authUser={auth.currentUser}
         setView={setView}
         existingPatient={null}
         t={t}
@@ -1378,7 +1715,7 @@ export default function App() {
     return (
       <PatientForm
         user={user}
-        authUser={authUser}
+        authUser={auth.currentUser}
         setView={setView}
         existingPatient={selectedPatient}
         t={t}
@@ -1387,165 +1724,12 @@ export default function App() {
 
   if (view === "details" && selectedPatient) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-10 transition-colors duration-500">
-        <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md shadow-sm px-4 py-4 sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 dark:border-slate-800">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setView("dashboard")}
-              className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-            >
-              <ArrowLeft className="rtl:rotate-180" size={20} />
-            </button>
-            <div>
-              <h1 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                {selectedPatient.name}
-                {selectedPatient.isHighRisk && (
-                  <span className="bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider">
-                    High Risk
-                  </span>
-                )}
-              </h1>
-              <span className="text-xs text-slate-500 dark:text-slate-400">
-                {selectedPatient.age} Yrs •{" "}
-                {selectedPatient.department || "General"}
-              </span>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setView("edit")}
-              className="text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 p-2 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
-            >
-              <Edit3 size={20} />
-            </button>
-            <button
-              onClick={() => {
-                handleDeletePatient(selectedPatient.id);
-                setView("dashboard");
-              }}
-              className="text-rose-500 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/20 p-2 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors"
-            >
-              <Trash2 size={20} />
-            </button>
-          </div>
-        </div>
-        <div className="p-4 max-w-3xl mx-auto space-y-5">
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-            <div className="flex justify-between items-start mb-4 border-b border-slate-100 dark:border-slate-700 pb-4">
-              <div className="flex flex-col">
-                <span className="text-xs text-slate-400 uppercase font-bold">
-                  {t.status}
-                </span>
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                  {selectedPatient.status || "Active"}
-                </span>
-              </div>
-              <div className="flex flex-col text-end">
-                <span className="text-xs text-slate-400 uppercase font-bold">
-                  {t.recordedBy}
-                </span>
-                <div className="flex items-center gap-1 text-slate-700 dark:text-slate-200 font-medium justify-end">
-                  <User size={14} /> {selectedPatient.author}
-                </div>
-              </div>
-            </div>
-            <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">
-              {t.presentation}
-            </h3>
-            <p className="text-lg text-slate-800 dark:text-white leading-relaxed">
-              {selectedPatient.presentation}
-            </p>
-          </div>
-
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-            <h3 className="text-xs font-bold text-slate-400 uppercase mb-4">
-              {t.riskProfile}
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {Object.keys(selectedPatient.riskFactors || {})
-                .filter((k) => selectedPatient.riskFactors[k])
-                .map((k) => (
-                  <span
-                    key={k}
-                    className="bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 px-4 py-1.5 rounded-full text-sm font-semibold border border-rose-100 dark:border-rose-800"
-                  >
-                    {k}
-                  </span>
-                ))}
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-            <h3 className="text-xs font-bold text-slate-400 uppercase mb-4">
-              {t.exam}
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
-              {EXAMINATION_FIELDS.map(
-                (f) =>
-                  selectedPatient.examination?.[f.id] && (
-                    <div
-                      key={f.id}
-                      className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl"
-                    >
-                      <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
-                        {f.label}
-                      </span>
-                      <span className="font-bold text-xl text-slate-800 dark:text-white">
-                        {selectedPatient.examination[f.id]}
-                      </span>
-                    </div>
-                  )
-              )}
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-            <h3 className="text-xs font-bold text-slate-400 uppercase mb-4">
-              {t.workup}
-            </h3>
-            <div className="space-y-3">
-              {Object.keys(selectedPatient.investigations || {}).map((k) => {
-                const item = selectedPatient.investigations[k];
-                if (!item.result && !item.notes && !item.images?.length)
-                  return null;
-                return (
-                  <div
-                    key={k}
-                    className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-900/50"
-                  >
-                    <div className="flex justify-between mb-2">
-                      <span className="font-bold text-slate-700 dark:text-slate-300">
-                        {k}
-                      </span>
-                      {item.result && (
-                        <span className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 px-2 rounded text-sm font-bold">
-                          {item.result}
-                        </span>
-                      )}
-                    </div>
-                    {item.notes && (
-                      <p className="text-sm italic text-slate-600 dark:text-slate-400">
-                        "{item.notes}"
-                      </p>
-                    )}
-                    {item.images?.length > 0 && (
-                      <div className="flex gap-2 mt-2 overflow-x-auto">
-                        {item.images.map((img, i) => (
-                          <img
-                            key={i}
-                            src={img.url}
-                            className="h-20 w-20 rounded-lg object-cover border dark:border-slate-600"
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
+      <PatientDetails
+        selectedPatient={selectedPatient}
+        setView={setView}
+        t={t}
+        onDelete={handleDeletePatient}
+      />
     );
   }
 
